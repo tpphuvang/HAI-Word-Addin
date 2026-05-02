@@ -1,161 +1,136 @@
+// Thiết lập mặc định khi khởi động
 Office.onReady((info) => {
     if (info.host === Office.HostType.Word) {
-        // Gắn sự kiện khi bấm nút
-        document.getElementById("btnGenerate").onclick = processDocument;
+        document.getElementById("btnGenerate").onclick = mainProcess;
     }
 });
 
-async function processDocument() {
+// --- HÀM ĐIỀU PHỐI CHÍNH ---
+async function mainProcess() {
+    const apiKey = document.getElementById("apiKey").value;
     const docType = document.getElementById("docType").value;
     const promptInput = document.getElementById("promptInput").value;
-    const apiKey = document.getElementById("apiKey").value;
-    const statusDiv = document.getElementById("status");
-    const spinner = document.getElementById("loadingSpinner");
+    const mode = document.querySelector('input[name="mode"]:checked').value;
+    
     const btn = document.getElementById("btnGenerate");
+    const spinner = document.getElementById("loadingSpinner");
 
-    // Rào lỗi cơ bản
-    if (!apiKey) {
-        showStatus("Lỗi: Vui lòng nhập Gemini API Key phía dưới!", "red");
-        return;
-    }
-    if (!promptInput.trim()) {
-        showStatus("Lỗi: Cần nhập nội dung tham mưu!", "red");
+    if (!apiKey || !promptInput.trim()) {
+        updateStatus("Thiếu API Key hoặc Nội dung!", "red");
         return;
     }
 
-    // Khóa giao diện
     btn.disabled = true;
     spinner.style.display = "block";
 
     try {
-        // BƯỚC 1: XỬ LÝ TEMPLATE (Nếu không phải văn bản tự do)
+        // 1. Xử lý Template (nếu có)
         if (docType !== "tu_do") {
-            showStatus("Đang tải biểu mẫu hành chính...", "#2b579a");
-            
-            // Link gọi file từ GitHub của sếp
-            const templateName = docType + ".docx"; 
-            const templateUrl = "https://tpphuvang.github.io/HAI-Word-Addin/" + templateName;
-            
-            const response = await fetch(templateUrl);
-            if (!response.ok) throw new Error("Chưa tìm thấy file mẫu " + templateName + " trên GitHub. Sếp đã up chưa?");
-            
-            const arrayBuffer = await response.arrayBuffer();
-            const base64File = arrayBufferToBase64(arrayBuffer);
-
-            await Word.run(async (context) => {
-                const body = context.document.body;
-                body.clear(); // Xóa sạch tài liệu cũ
-                body.insertFileFromBase64(base64File, Word.InsertLocation.start); // Chèn file mẫu vào
-                await context.sync();
-            });
+            updateStatus("Đang tải mẫu chuẩn...", "#2b579a");
+            await loadTemplate(docType);
         }
 
-        // BƯỚC 2: GỌI GEMINI API
-        showStatus("AI đang soạn nội dung lõi...", "#2b579a");
-        const generatedText = await callGemini(apiKey, docType, promptInput);
+        // 2. Gọi AI lấy nội dung
+        updateStatus("AI đang tham mưu nội dung...", "#2b579a");
+        const generatedText = await callAI(apiKey, docType, promptInput);
 
-        // GỌI HÀM XỬ LÝ KẾT QUẢ MỚI
-        await handleAIOutput(generatedText);
+        // 3. Phân luồng Editor hay Chat
+        if (mode === "chat") {
+            showChatBox(generatedText);
+            updateStatus("Đã soạn xong! Xem ở khung Chat.", "#2b579a");
+        } else {
+            await insertToWord(generatedText);
+            updateStatus("Đã chèn trực tiếp vào văn bản!", "green");
+        }
 
-    } catch (error) {
-        console.error(error);
-        showStatus("Lỗi hệ thống: " + error.message, "red");
-    } finally {
-        btn.disabled = false;
-        spinner.style.display = "none";
-    }
-};
-        await Word.run(async (context) => {
-            if (docType === "tu_do") {
-                // Nếu tự do: Đổ thẳng văn bản vào trang
-                const body = context.document.body;
-                body.insertText(generatedText, Word.InsertLocation.end);
-            } else {
-                // Nếu dùng mẫu: Tìm biến {{NOI_DUNG_AI}} và thay thế
-                const searchResults = context.document.body.search("{{NOI_DUNG_AI}}", { matchCase: true, matchWholeWord: true });
-                context.load(searchResults, 'font');
-                await context.sync();
-
-                if (searchResults.items.length > 0) {
-                    // Nếu tìm thấy chữ đó, ghi đè AI vào
-                    searchResults.items[0].insertText(generatedText, Word.InsertLocation.replace);
-                } else {
-                    // Nếu sếp quên đặt chữ đó trong mẫu, nó sẽ tự chèn xuống cuối
-                    context.document.body.insertText("\n\n" + generatedText, Word.InsertLocation.end);
-                }
-            }
-            await context.sync();
-        });
-
-        showStatus("Thành công! Văn bản đã sẵn sàng.", "green");
-
-    } catch (error) {
-        console.error(error);
-        showStatus("Lỗi hệ thống: " + error.message, "red");
+    } catch (err) {
+        updateStatus("Lỗi: " + err.message, "red");
     } finally {
         btn.disabled = false;
         spinner.style.display = "none";
     }
 }
 
-// Hàm chuyển đổi File sang dạng Base64
-function arrayBufferToBase64(buffer) {
-    let binary = '';
-    const bytes = new Uint8Array(buffer);
-    const len = bytes.byteLength;
-    for (let i = 0; i < len; i++) {
-        binary += String.fromCharCode(bytes[i]);
-    }
-    return window.btoa(binary);
-}
+// --- CÁC HÀM BỔ TRỢ ---
 
-// Hàm phụ trợ hiển thị trạng thái
-function showStatus(message, color) {
-    const statusDiv = document.getElementById("status");
-    statusDiv.innerText = message;
-    statusDiv.style.color = color;
-}
+async function loadTemplate(type) {
+    const url = `https://tpphuvang.github.io/HAI-Word-Addin/${type}.docx`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("Không thấy file mẫu trên GitHub. Check lại tên hoa/thường!");
+    
+    const buffer = await res.arrayBuffer();
+    const base64 = arrayBufferToBase64(buffer);
 
-// Hàm gọi API Gemini
-// --- HÀM XỬ LÝ KẾT QUẢ: EDITOR HAY CHAT ---
-async function handleAIOutput(generatedText) {
-    const mode = document.querySelector('input[name="mode"]:checked').value;
-    const chatResult = document.getElementById("chatResult");
-    const btnInsertManual = document.getElementById("btnInsertManual");
-
-    if (mode === "chat") {
-        chatResult.innerText = generatedText;
-        chatResult.style.display = "block";
-        btnInsertManual.style.display = "block";
-        btnInsertManual.onclick = () => insertToWord(generatedText); 
-        showStatus("Đã soạn xong! Xem ở khung dưới.", "#2b579a");
-    } else {
-        chatResult.style.display = "none";
-        btnInsertManual.style.display = "none";
-        await insertToWord(generatedText);
-        showStatus("Đã chèn văn bản thành công!", "green");
-    }
-}
-
-// --- HÀM CHÈN THÔNG MINH ---
-async function insertToWord(text) {
     await Word.run(async (context) => {
-        const docType = document.getElementById("docType").value;
-        
-        if (docType !== "tu_do") {
-            const searchResults = context.document.body.search("{{NOI_DUNG_AI}}", { matchCase: true });
-            context.load(searchResults);
-            await context.sync();
-            
-            if (searchResults.items.length > 0) {
-                searchResults.items[0].insertText(text, Word.InsertLocation.replace);
-                await context.sync();
-                return;
-            }
-        }
-        
-        const selection = context.document.getSelection();
-        selection.insertText(text, Word.InsertLocation.replace); 
+        context.document.body.clear();
+        context.document.body.insertFileFromBase64(base64, "Start");
         await context.sync();
     });
+}
+
+async function callAI(key, type, prompt) {
+    // Sếp có thể đổi gemini-1.5-pro thành gemini-1.5-flash để tránh hết hạn mức
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`;
+    
+    const body = {
+        contents: [{ parts: [{ text: prompt }] }],
+        systemInstruction: { parts: [{ text: `Bạn là trợ lý hành chính xã Phú Vinh. Soạn nội dung lõi cho ${type} theo Nghị định 30/2020/NĐ-CP. KHÔNG viết Header/Footer.` }] }
+    };
+
+    const res = await fetch(url, { method: "POST", body: JSON.stringify(body) });
+    if (!res.ok) throw new Error("Hết hạn mức API hoặc Key sai.");
+    
+    const data = await res.json();
+    return data.candidates[0].content.parts[0].text;
+}
+
+async function insertToWord(text) {
+    await Word.run(async (context) => {
+        const body = context.document.body;
+        // Tìm và thay thế tất cả placeholder
+        const searchResults = body.search("{{NOI_DUNG_AI}}", { matchCase: true });
+        context.load(searchResults, 'font');
+        await context.sync();
+
+        if (searchResults.items.length > 0) {
+            for (let item of searchResults.items) {
+                item.insertText(text, "Replace");
+                formatFont(item);
+            }
+        } else {
+            // Nếu không có placeholder, chèn tại con trỏ
+            const sel = context.document.getSelection();
+            sel.insertText(text, "Replace");
+            formatFont(sel);
+        }
+        await context.sync();
+    });
+}
+
+function formatFont(range) {
+    range.font.name = "Times New Roman";
+    range.font.size = 14;
+    range.font.color = "black";
+}
+
+function showChatBox(text) {
+    const box = document.getElementById("chatResult");
+    const btn = document.getElementById("btnInsertManual");
+    box.innerText = text;
+    box.style.display = "block";
+    btn.style.display = "block";
+    btn.onclick = () => insertToWord(text);
+}
+
+function updateStatus(msg, color) {
+    const s = document.getElementById("status");
+    s.innerText = msg;
+    s.style.color = color;
+}
+
+function arrayBufferToBase64(buffer) {
+    let binary = '';
+    let bytes = new Uint8Array(buffer);
+    for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+    return window.btoa(binary);
 }
