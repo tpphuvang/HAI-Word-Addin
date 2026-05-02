@@ -69,8 +69,8 @@ async function loadTemplate(type) {
 }
 
 async function callAI(key, type, prompt) {
-    // --- KHU VỰC CẤU HÌNH (Sếp chỉ cần đổi ở đây) ---
-    const provider = "gemini"; // Có thể đổi thành: "claude", "perplexity", hoặc "local"
+    // TỰ ĐỘNG ĐỌC TỪ GIAO DIỆN: Sếp chọn gì trên màn hình, code sẽ chạy hãng đó
+    const provider = document.getElementById("aiProvider").value;
     
     let url = "";
     let headers = { "Content-Type": "application/json" };
