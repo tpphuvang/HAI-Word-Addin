@@ -69,19 +69,57 @@ async function loadTemplate(type) {
 }
 
 async function callAI(key, type, prompt) {
-    // Sếp có thể đổi gemini-1.5-pro thành gemini-1.5-flash để tránh hết hạn mức
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`;
+    // --- KHU VỰC CẤU HÌNH (Sếp chỉ cần đổi ở đây) ---
+    const provider = "gemini"; // Có thể đổi thành: "claude", "perplexity", hoặc "local"
     
-    const body = {
-        contents: [{ parts: [{ text: prompt }] }],
-        systemInstruction: { parts: [{ text: `Bạn là trợ lý hành chính xã Phú Vinh. Soạn nội dung lõi cho ${type} theo Nghị định 30/2020/NĐ-CP. KHÔNG viết Header/Footer.` }] }
-    };
+    let url = "";
+    let headers = { "Content-Type": "application/json" };
+    let body = {};
 
-    const res = await fetch(url, { method: "POST", body: JSON.stringify(body) });
-    if (!res.ok) throw new Error("Hết hạn mức API hoặc Key sai.");
+    const systemMsg = `Bạn là trợ lý hành chính xã Phú Vinh. Soạn nội dung cho ${type}. KHÔNG viết Header/Footer.`;
+
+    // --- LOGIC TỰ ĐỘNG XOAY TRỤC ---
+    if (provider === "gemini") {
+        url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`;
+        body = {
+            contents: [{ parts: [{ text: prompt }] }],
+            systemInstruction: { parts: [{ text: systemMsg }] }
+        };
+    } 
+    else if (provider === "claude") {
+        url = "https://api.anthropic.com/v1/messages";
+        headers["x-api-key"] = key;
+        headers["anthropic-version"] = "2023-06-01";
+        body = {
+            model: "claude-3-sonnet-20240229",
+            max_tokens: 2000,
+            system: systemMsg,
+            messages: [{ role: "user", content: prompt }]
+        };
+    }
+    else if (provider === "perplexity" || provider === "local") {
+        // Chuẩn OpenAI (Perplexity và LM Studio dùng chung chuẩn này)
+        url = (provider === "local") ? "http://IP_MAY_KIA:1234/v1/chat/completions" : "https://api.perplexity.ai/chat/completions";
+        headers["Authorization"] = `Bearer ${key}`;
+        body = {
+            model: (provider === "local") ? "local-model" : "pplx-7b-online",
+            messages: [
+                { role: "system", content: systemMsg },
+                { role: "user", content: prompt }
+            ]
+        };
+    }
+
+    // --- THỰC THI GỬI TIN ---
+    const res = await fetch(url, { method: "POST", headers: headers, body: JSON.stringify(body) });
+    if (!res.ok) throw new Error("Lỗi kết nối API. Check lại Key hoặc Hạn mức.");
     
     const data = await res.json();
-    return data.candidates[0].content.parts[0].text;
+    
+    // Trích xuất kết quả tùy theo hãng (vì mỗi ông nhả JSON một kiểu)
+    if (provider === "gemini") return data.candidates[0].content.parts[0].text;
+    if (provider === "claude") return data.content[0].text;
+    return data.choices[0].message.content; // Cho Perplexity và LM Studio
 }
 
 async function insertToWord(text) {
