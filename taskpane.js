@@ -54,8 +54,17 @@ async function processDocument() {
         showStatus("AI đang soạn nội dung lõi...", "#2b579a");
         const generatedText = await callGemini(apiKey, docType, promptInput);
 
-        // BƯỚC 3: ĐIỀN VÀO CHỖ TRỐNG TRÊN WORD
-        showStatus("Đang hoàn thiện văn bản...", "#2b579a");
+        // GỌI HÀM XỬ LÝ KẾT QUẢ MỚI
+        await handleAIOutput(generatedText);
+
+    } catch (error) {
+        console.error(error);
+        showStatus("Lỗi hệ thống: " + error.message, "red");
+    } finally {
+        btn.disabled = false;
+        spinner.style.display = "none";
+    }
+};
         await Word.run(async (context) => {
             if (docType === "tu_do") {
                 // Nếu tự do: Đổ thẳng văn bản vào trang
@@ -108,38 +117,45 @@ function showStatus(message, color) {
 }
 
 // Hàm gọi API Gemini
-async function callGemini(apiKey, type, prompt) {
-    const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=" + apiKey;
-    
-    // System Prompt kết hợp (Căn dặn AI)
-    const systemInstruction = `Bạn là chuyên viên hành chính tại UBND xã Phú Vinh, thành phố Huế. 
-Nhiệm vụ: Soạn phần thân của văn bản (loại: ${type}) theo đúng văn phong Nghị định 30/2020/NĐ-CP.
-KHÔNG viết Quốc hiệu, Tiêu ngữ, Tên cơ quan vì đã có sẵn trong file mẫu. Chỉ viết phần nội dung cốt lõi và kết luận.`;
+// --- HÀM XỬ LÝ KẾT QUẢ: EDITOR HAY CHAT ---
+async function handleAIOutput(generatedText) {
+    const mode = document.querySelector('input[name="mode"]:checked').value;
+    const chatResult = document.getElementById("chatResult");
+    const btnInsertManual = document.getElementById("btnInsertManual");
 
-    const requestBody = {
-        contents: [{
-            role: "user",
-            parts: [{ text: prompt }]
-        }],
-        systemInstruction: {
-            role: "system",
-            parts: [{ text: systemInstruction }]
-        },
-        generationConfig: {
-            temperature: 0.3 // Giữ độ sáng tạo thấp để văn phong nghiêm túc
-        }
-    };
-
-    const response = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(requestBody)
-    });
-
-    if (!response.ok) {
-        throw new Error("Lỗi kết nối Gemini API. Có thể do Key sai hoặc hết hạn mức.");
+    if (mode === "chat") {
+        chatResult.innerText = generatedText;
+        chatResult.style.display = "block";
+        btnInsertManual.style.display = "block";
+        btnInsertManual.onclick = () => insertToWord(generatedText); 
+        showStatus("Đã soạn xong! Xem ở khung dưới.", "#2b579a");
+    } else {
+        chatResult.style.display = "none";
+        btnInsertManual.style.display = "none";
+        await insertToWord(generatedText);
+        showStatus("Đã chèn văn bản thành công!", "green");
     }
+}
 
-    const data = await response.json();
-    return data.candidates[0].content.parts[0].text;
+// --- HÀM CHÈN THÔNG MINH ---
+async function insertToWord(text) {
+    await Word.run(async (context) => {
+        const docType = document.getElementById("docType").value;
+        
+        if (docType !== "tu_do") {
+            const searchResults = context.document.body.search("{{NOI_DUNG_AI}}", { matchCase: true });
+            context.load(searchResults);
+            await context.sync();
+            
+            if (searchResults.items.length > 0) {
+                searchResults.items[0].insertText(text, Word.InsertLocation.replace);
+                await context.sync();
+                return;
+            }
+        }
+        
+        const selection = context.document.getSelection();
+        selection.insertText(text, Word.InsertLocation.replace); 
+        await context.sync();
+    });
 }
