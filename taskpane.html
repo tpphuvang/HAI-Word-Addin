@@ -1,145 +1,116 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-  <meta charset="UTF-8"/>
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>HAI Assistant - Word Add-in</title>
-  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
-  <style>
-    :root {
-      --bg:#12100a; --sf:#1c1810; --sf2:#252015; --bd:#3a3020;
-      --ac:#e8a020; --ac2:#d45a10; --ac3:#c0392b;
-      --tx:#f0e8d8; --tx2:#9a8a6a;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Be Vietnam Pro', sans-serif; background: var(--bg); color: var(--tx); font-size: 13px; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
-    .header { padding: 8px 12px; background: var(--sf); border-bottom: 1px solid var(--bd); display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-    .logo { width: 26px; height: 26px; background: linear-gradient(135deg, var(--ac), var(--ac3)); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; font-weight: bold;}
-    .header-title { font-size: 13px; font-weight: 600; flex: 1; color: var(--ac); }
-    .btn-sm { background: var(--sf2); border: 1px solid var(--bd); border-radius: 5px; color: var(--tx2); font-size: 11px; padding: 3px 7px; cursor: pointer; font-family: inherit; transition: all 0.2s; }
-    .btn-sm:hover { border-color: var(--ac); color: var(--ac); }
-    .sessions { padding: 5px 12px; background: var(--sf); border-bottom: 1px solid var(--bd); display: flex; gap: 5px; overflow-x: auto; flex-shrink: 0; scrollbar-width: none; align-items: center; }
-    .sessions::-webkit-scrollbar { display: none; }
-    .chip-wrap { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
-    .session-chip { background: var(--sf2); border: 1px solid var(--bd); border-radius: 20px; padding: 2px 8px; font-size: 11px; color: var(--tx2); cursor: pointer; white-space: nowrap; transition: all 0.2s; }
-    .session-chip.active { border-color: var(--ac); color: var(--ac); background: #2a1f08; }
-    .chip-del { background: none; border: none; color: var(--tx2); font-size: 11px; cursor: pointer; padding: 0 2px; transition: color 0.2s; line-height: 1; }
-    .chip-del:hover { color: var(--ac3); }
-    .config-row { padding: 6px 12px; background: var(--sf); border-bottom: 1px solid var(--bd); display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
-    .api-input { flex: 1; background: var(--sf2); border: 1px solid var(--bd); border-radius: 5px; padding: 4px 8px; color: var(--tx); font-family: monospace; font-size: 11px; outline: none; transition: border-color 0.2s; }
-    .api-input:focus { border-color: var(--ac); }
-    .api-save { background: var(--ac); border: none; border-radius: 5px; color: #12100a; font-weight: 600; padding: 4px 9px; font-size: 11px; cursor: pointer; white-space: nowrap; }
-    .chatbox { flex: 1; overflow-y: auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; scrollbar-width: thin; scrollbar-color: var(--bd) transparent; }
-    .chatbox::-webkit-scrollbar { width: 4px; }
-    .chatbox::-webkit-scrollbar-thumb { background: var(--bd); border-radius: 4px; }
-    .empty-state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--tx2); text-align: center; padding: 20px; }
-    .empty-state .icon { font-size: 28px; opacity: 0.3; }
-    .empty-state p { font-size: 11px; line-height: 1.8; }
-    .bubble { padding: 8px 10px; border-radius: 8px; line-height: 1.6; animation: fadeIn 0.2s ease; }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
-    .bubble-user { background: #1e1a0e; border: 1px solid #3a2e10; }
-    .bubble-ai { background: #1a1208; border: 1px solid #2e1e08; }
-    .bubble-label { font-size: 10px; font-weight: 600; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; display: flex; justify-content: space-between; align-items: center; gap: 4px; }
-    .bubble-user .bubble-label { color: var(--ac); }
-    .bubble-ai .bubble-label { color: var(--ac2); }
-    .bubble-actions { display: flex; gap: 4px; }
-    .btn-bubble { background: none; border: 1px solid var(--bd); border-radius: 3px; color: var(--tx2); font-size: 10px; cursor: pointer; padding: 1px 5px; font-family: inherit; transition: all 0.2s; }
-    .btn-bubble:hover { border-color: var(--ac); color: var(--ac); }
-    .btn-bubble.green:hover { border-color: var(--ac2); color: var(--ac2); }
-    .bubble-text { font-size: 12px; line-height: 1.7; white-space: pre-wrap; word-wrap: break-word; }
-    .bottom { padding: 7px 12px 8px; background: var(--sf); border-top: 1px solid var(--bd); flex-shrink: 0; display: flex; flex-direction: column; gap: 6px; }
-    .toolbar { display: flex; gap: 4px; flex-wrap: wrap; justify-content: space-between; }
-    .tool-btn { background: var(--sf2); border: 1px solid var(--bd); border-radius: 5px; color: var(--tx2); padding: 3px 7px; font-size: 11px; cursor: pointer; font-family: inherit; transition: all 0.2s; white-space: nowrap; flex: 1;}
-    .tool-btn:hover { border-color: var(--ac); color: var(--tx); }
-    .tool-btn.active { border-color: var(--ac2); color: var(--ac2); }
-    .files-area { display: flex; flex-wrap: wrap; gap: 4px; }
-    .file-chip { display: flex; align-items: center; gap: 4px; background: var(--sf2); border: 1px solid var(--bd); border-radius: 5px; padding: 3px 7px; font-size: 11px; color: var(--tx2); }
-    .chip-rm { background: none; border: none; color: var(--ac3); cursor: pointer; font-size: 12px; padding: 0; line-height: 1; }
-    .input-row { display: flex; gap: 6px; align-items: flex-end; }
-    .prompt-input { flex: 1; background: var(--sf2); border: 1px solid var(--bd); border-radius: 7px; padding: 6px 9px; color: var(--tx); font-family: inherit; font-size: 12px; resize: none; outline: none; min-height: 32px; max-height: 90px; line-height: 1.5; transition: border-color 0.2s; }
-    .prompt-input:focus { border-color: var(--ac); }
-    .prompt-input::placeholder { color: var(--tx2); }
-    .send-btn { width: 32px; height: 32px; background: linear-gradient(135deg, var(--ac), var(--ac2)); border: none; border-radius: 7px; color: #12100a; font-size: 14px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: opacity 0.2s; }
-    .send-btn:hover { opacity: 0.85; }
-    .send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-    .action-row { display: flex; gap: 5px; }
-    .btn-insert-main { flex: 1; background: linear-gradient(135deg, var(--ac2), var(--ac3)); border: none; border-radius: 5px; color: white; font-weight: 600; font-size: 11px; padding: 6px; cursor: pointer; font-family: inherit; transition: opacity 0.2s; }
-    .btn-insert-main:hover { opacity: 0.85; }
-    .btn-clear { background: var(--sf2); border: 1px solid var(--bd); border-radius: 5px; color: var(--tx2); font-size: 11px; padding: 6px 10px; cursor: pointer; font-family: inherit; transition: all 0.2s; }
-    .btn-clear:hover { border-color: var(--ac3); color: var(--ac3); }
-    .focus-hint { font-size: 10px; color: var(--tx2); text-align: center; cursor: pointer; padding: 1px; transition: color 0.2s; }
-    .focus-hint:hover { color: var(--ac); }
-    .status { font-size: 10px; color: var(--tx2); min-height: 12px; }
-    .status.ok { color: var(--ac); }
-    .status.err { color: var(--ac3); }
-    .thinking { display: flex; gap: 4px; align-items: center; padding: 3px 0; }
-    .dot { width: 5px; height: 5px; border-radius: 50%; animation: bounce 1.2s infinite; }
-    .dot:nth-child(1) { background: var(--ac); }
-    .dot:nth-child(2) { background: var(--ac2); animation-delay: 0.2s; }
-    .dot:nth-child(3) { background: var(--ac3); animation-delay: 0.4s; }
-    @keyframes bounce { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(-5px); } }
-    
-    .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 999; align-items: center; justify-content: center; }
-    .modal-overlay.show { display: flex; }
-    .modal-box { background: var(--sf); border: 1px solid var(--bd); border-radius: 10px; padding: 18px; width: 220px; text-align: center; }
-    .modal-box p { font-size: 12px; color: var(--tx); margin-bottom: 14px; line-height: 1.6; }
-    .modal-btns { display: flex; gap: 8px; justify-content: center; }
-    .modal-ok { background: var(--ac3); border: none; border-radius: 5px; color: white; font-size: 12px; padding: 6px 16px; cursor: pointer; font-family: inherit; }
-    .modal-cancel { background: var(--sf2); border: 1px solid var(--bd); border-radius: 5px; color: var(--tx2); font-size: 12px; padding: 6px 16px; cursor: pointer; font-family: inherit; }
-    input[type="file"] { display: none; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HAI Assistant</title>
+    <!-- Thư viện lõi của Microsoft -->
+    <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+    <style>
+        /* Đồng bộ tuyệt đối với giao diện Microsoft Word */
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            padding: 15px; 
+            background-color: #ffffff; 
+            color: #333333; 
+            margin: 0; 
+        }
+        h2 { 
+            font-size: 16px; 
+            color: #2b579a; /* Màu xanh đặc trưng của Word */
+            margin-bottom: 20px; 
+            font-weight: 600; 
+            border-bottom: 1px solid #eaeaea;
+            padding-bottom: 10px;
+        }
+        .form-group { margin-bottom: 15px; }
+        label { 
+            display: block; 
+            font-size: 13px; 
+            margin-bottom: 5px; 
+            font-weight: 500; 
+        }
+        select, textarea, input { 
+            width: 100%; 
+            padding: 8px; 
+            border: 1px solid #c8c8c8; 
+            border-radius: 4px; 
+            box-sizing: border-box; 
+            font-family: inherit; 
+            font-size: 13px; 
+        }
+        textarea { resize: vertical; min-height: 120px; }
+        select:focus, textarea:focus, input:focus { 
+            border-color: #2b579a; 
+            outline: none; 
+        }
+        button { 
+            background-color: #2b579a; 
+            color: white; 
+            border: none; 
+            padding: 10px 15px; 
+            width: 100%; 
+            border-radius: 4px; 
+            font-size: 14px; 
+            cursor: pointer; 
+            transition: 0.2s; 
+            font-weight: 500; 
+        }
+        button:hover { background-color: #1a365d; }
+        button:disabled { background-color: #cccccc; cursor: not-allowed; }
+        
+        #status { margin-top: 10px; font-size: 12px; text-align: center; font-weight: 500; }
+        
+        /* Hiệu ứng xoay khi tải */
+        .loader { 
+            display: none; 
+            border: 3px solid #f3f3f3; 
+            border-top: 3px solid #2b579a; 
+            border-radius: 50%; 
+            width: 20px; 
+            height: 20px; 
+            animation: spin 1s linear infinite; 
+            margin: 15px auto; 
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* Vùng nhập Key thu gọn phía dưới cùng */
+        .settings-zone {
+            margin-top: 30px;
+            padding-top: 15px;
+            border-top: 1px dashed #eaeaea;
+        }
+    </style>
 </head>
 <body>
-  <div class="header">
-    <div class="logo">&#10022;</div>
-    <span class="header-title">HAI Assistant V3</span>
-    <button class="btn-sm" id="btnNew">+ Cuộc Chat Mới</button>
-  </div>
-  
-  <div class="sessions" id="sessionList"></div>
-  
-  <div class="config-row">
-    <input type="password" id="apiKey" class="api-input" placeholder="Gemini API Key..."/>
-    <button id="btnSave" class="api-save">Lưu Key</button>
-  </div>
-  
-  <div class="chatbox" id="chatBox"></div>
-  
-  <div class="bottom">
-    <div class="toolbar">
-      <button class="tool-btn" id="btnReadSel">1. Đọc đoạn đang bôi đen</button>
-      <button class="tool-btn" id="btnUpload">Hoặc đính kèm PDF/Ảnh</button>
+    <h2>Trợ lý AI - Phú Vinh</h2>
+    
+    <div class="form-group">
+        <label for="docType">1. Chọn loại văn bản:</label>
+        <select id="docType">
+            <option value="tu_do">Văn bản tự do (Không dùng mẫu)</option>
+            <option value="cong_van">Công văn</option>
+            <option value="to_trinh">Tờ trình</option>
+            <option value="quyet_dinh_ca_biet">Quyết định cá biệt</option>
+            <option value="quyet_dinh_quy_pham">Quyết định quy phạm</option>
+            <option value="bao_cao">Báo cáo</option>
+        </select>
     </div>
-    
-    <div class="files-area" id="filesArea"></div>
-    <input type="file" id="fileInput" accept="image/*,application/pdf" multiple/>
-    
-    <div class="input-row">
-      <textarea id="prompt" class="prompt-input" placeholder="Nhập yêu cầu: Ví dụ 'Soạn công văn về...' hoặc 'Sửa lại đoạn bôi đen cho trang trọng hơn...'" rows="1" spellcheck="false" autocomplete="off"></textarea>
-      <button id="btnSend" class="send-btn">&#10148;</button>
-    </div>
-    
-    <div class="action-row">
-      <button id="btnInsertLast" class="btn-insert-main">2. Biến hóa vùng bôi đen (Copilot)</button>
-      <button id="btnClear" class="btn-clear">Xóa Chat</button>
-    </div>
-    
-    <div class="focus-hint" id="focusHint">[ Bấm vào đây để trở lại Word gõ tiếng Việt ]</div>
-    <div class="status" id="status">Sẵn sàng phục vụ!</div>
-  </div>
 
-  <div class="modal-overlay" id="modalOverlay">
-    <div class="modal-box">
-      <p id="modalMsg">Bạn có chắc muốn xóa?</p>
-      <div class="modal-btns">
-        <button class="modal-ok" id="modalOk">Đồng ý</button>
-        <button class="modal-cancel" id="modalCancel">Hủy</button>
-      </div>
+    <div class="form-group">
+        <label for="promptInput">2. Nội dung cần tham mưu:</label>
+        <textarea id="promptInput" placeholder="Ví dụ: Đề nghị bổ sung kinh phí mua sắm 02 máy tính cho Bộ phận Một cửa vì máy cũ đã hỏng..."></textarea>
     </div>
-  </div>
 
-  <script src="taskpane.js"></script>
+    <button id="btnGenerate">Soạn thảo ngay</button>
+    <div class="loader" id="loadingSpinner"></div>
+    <div id="status"></div>
+
+    <div class="settings-zone">
+        <label for="apiKey" style="color: #666; font-size: 11px;">Khóa kết nối Gemini API (Chỉ lưu trên máy):</label>
+        <input type="password" id="apiKey" placeholder="Nhập API Key vào đây..." style="font-size: 11px; padding: 5px;">
+    </div>
+
+    <script src="taskpane.js"></script>
 </body>
 </html>
